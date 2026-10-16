@@ -169,10 +169,10 @@ function compute(){
 }
 
 function parts(s){
-  const base=s.target||s.orders, by=s.by;
+  const base=s.orders||s.target, by=s.by;   // progress is measured against Actual Orders (Preorders is the forecast)
   const tiles=`<div class="tiles"><div><b>${fmt(s.target)}</b><span>Preorders</span></div><div><b>${fmt(s.orders)}</b><span>Actual Orders</span></div><div><b>${fmt(s.arrived)}</b><span>In station</span></div><div><b>${fmt(s.delivered)}</b><span>Delivered</span></div></div>`;
-  const stack=`<div class="stack">${STATUSES.map(k=>by[k]?`<i title="${k}: ${by[k]}" style="width:${pct(by[k],base)}%;background:${COLOR[k]}"></i>`:'').join('')}</div>`;
-  const arr=`<div class="thin"><i style="width:${pct(s.arrived,base)}%"></i></div><div class="cap"><span>Arrived in station</span><span>${pct(s.arrived,base).toFixed(1)}% (${fmt(s.arrived)}/${fmt(base)})</span></div>`;
+  const stack=`<div class="stack">${STATUSES.map(k=>by[k]?`<i title="${k}: ${by[k]}" style="width:${pct(by[k],base)}%;background:${COLOR[k]}"></i>`:'').join('')}</div><div class="cap"><span>Delivered</span><span>${pct(s.delivered,base).toFixed(1)}% (${fmt(s.delivered)}/${fmt(base)})</span></div>`;
+  const arr=`<div class="thin"><i style="width:${pct(s.arrived,base)}%"></i></div><div class="cap"><span>Arrived in station</span><span>${pct(s.arrived,base).toFixed(1)}% (${fmt(s.arrived)}/${fmt(base)})</span></div>${s.target?`<div class="cap"><span>Actual vs Preorders</span><span>${s.orders>=s.target?'+':''}${fmt(s.orders-s.target)} (${Math.round(s.orders/s.target*100)}%)</span></div>`:''}`;
   const chips=`<div class="chips">${AZ.map(k=>`<span class="chip ${by[k]?'':'z'}" style="--c:${COLOR[k]}">${k} <b>${by[k]||0}</b></span>`).join('')}</div>`;
   return {base,tiles,stack,arr,chips,p:pct(s.delivered,base)};
 }
