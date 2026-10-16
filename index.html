@@ -201,6 +201,22 @@ function sysHtml(r){   // station name shows only when Actual Status is one of t
   if(a==='Onhold')return `<span class="sp" style="background:${COLOR.Onhold}22;color:${COLOR.Onhold}">Onhold</span>`;
   return `<span class="sp">Not in station</span>`}
 
+function renderRows(){
+  const q=norm($('q').value),fs=$('fs').value,fst=$('fst').value;
+  const L=model.list.filter(r=>(!fs||r.station===fs)&&(!fst||(fst==='_none'?!r.eff:r.eff===fst))&&(!q||norm(r.oid+r.cur+r.cp+(manual[r.oid]?.rider||'')).includes(q)));
+  const V=L.slice(0,limit);
+  const opt=(arr,v)=>arr.map(x=>`<option value="${x}" ${x===v?'selected':''}>${x||'—'}</option>`).join('');
+  $('rows').innerHTML=V.map(r=>{const m=manual[r.oid]||{};
+    return `<tr data-id="${esc(r.oid)}"><td data-label="Order ID">${esc(r.oid)}</td><td data-label="Station">${esc(r.station)}</td><td data-label="Current Station">${esc(r.cur)}</td><td data-label="Buyer CP#">${esc(r.cp)}</td>
+    <td data-label="System status">${sysHtml(r)}</td>
+    <td data-label="Actual Status"><select data-f="actualStatus">${opt(['',...AZ],m.actualStatus||'')}</select></td>
+    <td data-label="HVI OpEx Inbound"><select data-f="hvi">${opt(['','Yes','No'],m.hvi||'')}</select></td>
+    <td data-label="Rider Assigned"><input type="text" data-f="rider" value="${esc(m.rider||'')}"></td>
+    <td data-label="POD Link"><div class="pod"><input type="text" data-f="pod" value="${esc(m.pod||'')}" placeholder="https://">${/^https?:/.test(m.pod||'')?`<a href="${esc(m.pod)}" target="_blank" rel="noopener">open</a>`:''}</div></td></tr>`}).join('');
+  $('cnt').textContent=`Showing ${V.length} of ${L.length}`;
+  $('more').style.display=L.length>V.length?'block':'none';
+}
+
 /* ---- Cloudflare sync (each browser keeps its own filters; only saved inputs are shared) ---- */
 const setSync=(t,c)=>{const e=$('sync');e.textContent=t;e.className='pill '+(c||'')};
 function save(id,field,val){
