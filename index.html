@@ -55,6 +55,7 @@ tr:hover td{background:rgba(238,77,45,.04)}
 td input[type=text]{width:150px}
 .sp{font-size:11.5px;padding:2px 9px;border-radius:99px;background:var(--bar)}
 #err{color:#dc2626;margin:8px 2px}
+.card summary{cursor:pointer}
 .more{display:block;margin:12px auto;background:var(--ac)}
 </style>
 </head>
@@ -68,13 +69,14 @@ td input[type=text]{width:150px}
   <div class="card hero" id="total"></div>
   <div class="sec"><h3>By Station</h3><span class="mut">Click a card to filter the order list</span></div>
   <div class="grid" id="stations"></div>
+  <details class="card" style="margin-top:14px"><summary><b>Where orders are now</b> <span class="mut">(Current Station values from Actual Orders)</span></summary><div class="chips" id="cursBody"></div></details>
   <div class="sec"><h3>Orders</h3><span class="mut" id="cnt"></span></div>
   <div class="tools">
     <input id="q" placeholder="Search Order ID / CP# / rider">
     <select id="fs"></select><select id="fst"></select>
   </div>
   <div class="wrap"><table>
-    <thead><tr><th>Order ID</th><th>Station</th><th>Buyer CP#</th><th>System status</th><th>Actual Status</th><th>HVI OpEx Tracker Inbound</th><th>Rider Assigned</th><th>POD Link</th></tr></thead>
+    <thead><tr><th>Order ID</th><th>Station</th><th>Current Station</th><th>Buyer CP#</th><th>System status</th><th>Actual Status</th><th>HVI OpEx Tracker Inbound</th><th>Rider Assigned</th><th>POD Link</th></tr></thead>
     <tbody id="rows"></tbody></table></div>
   <button class="more" id="more" style="display:none">Show more</button>
   <div class="mut" id="dbg" style="margin-top:10px"></div>
@@ -106,7 +108,7 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 const fmt=n=>Number(n||0).toLocaleString();
 const pct=(a,b)=>b?Math.min(100,a/b*100):0;
 let pre=[],ord=[],manual={},model={st:[],list:[],info:''},sel='',limit=CFG.PAGE,stSig='';
-const timers={},pending=new Set();
+const timers={},pending=new Set(),HDR=new Set();
 
 function parseCSV(t){const r=[];let row=[],c='',q=false;
   for(let i=0;i<t.length;i++){const ch=t[i];
@@ -115,7 +117,7 @@ function parseCSV(t){const r=[];let row=[],c='',q=false;
     else if(ch=='\n'){row.push(c);r.push(row);row=[];c=''}else if(ch!='\r')c+=ch}
   if(c||row.length){row.push(c);r.push(row)}return r}
 
-async function loadSheet(name,keyAliases){
+async function loadSheet(name,keyAliases,order){
   const gv=`https://docs.google.com/spreadsheets/d/${CFG.SHEET_ID}/gviz/tq?tqx=out:csv&headers=0&sheet=${encodeURIComponent(name)}`;
   let text;
   try{const res=await fetch(gv);if(!res.ok)throw new Error('HTTP '+res.status);text=await res.text();}
@@ -126,9 +128,12 @@ async function loadSheet(name,keyAliases){
   if(/^\s*<(!doctype|html)/i.test(text))throw new Error(name+': Google returned a login/error page');
   const rows=parseCSV(text),keys=keyAliases.map(norm);
   let h=rows.findIndex(r=>r.some(x=>keys.includes(norm(x))));if(h<0)h=2;
-  const head=rows[h].map(norm);
+  const head=rows[h].map(norm),idx={};
+  for(const k in F){const i=head.findIndex(x=>F[k].map(norm).includes(x));if(i>=0)idx[k]=i}
+  const an=order.findIndex(k=>idx[k]!==undefined);           // blank/missing header -> infer from column position
+  order.forEach((k,pos)=>{if(F[k]&&idx[k]===undefined&&an>=0){idx[k]=idx[order[an]]+(pos-an);HDR.add(name+'.'+k)}});
   return rows.slice(h+1).filter(r=>r.some(x=>x&&x.trim())).map(r=>{
-    const o={};for(const k in F){const i=head.findIndex(x=>F[k].map(norm).includes(x));o[k]=i>=0?(r[i]||'').trim():''}return o});
+    const o={};for(const k in F){const i=idx[k];o[k]=i>=0?(r[i]||'').trim():''}return o});
 }
 
 const detect=cur=>{const n=norm(cur);return STATUSES.find(s=>n.includes(norm(s)))||null};
@@ -139,19 +144,20 @@ function compute(){
   const P=(f&&!fp.length)?pre:fp, O=(f&&!fo.length)?ord:fo;   // each sheet falls back to "all" on its own
   const st={},get=n=>st[norm(n)]||(st[norm(n)]={name:n,target:0,orders:0,arrived:0,delivered:0,by:{}});
   P.forEach(r=>{if(r.pHub)get(r.pHub).target+=parseInt(String(r.cnt||'0').replace(/[^\d-]/g,''))||0});
-  const list=[];
+  const list=[],cc={};
   O.forEach(r=>{
     if(!r.oid||!r.stn)return;
-    const s=get(r.stn);s.orders++;
-    const cs=norm(r.cur),sys=detect(r.cur),inStn=cs.includes(norm(r.stn))||(sys&&cs===norm(sys));
+    const s=get(r.stn);s.orders++;const ck=r.cur||'(blank)';cc[ck]=(cc[ck]||0)+1;
+    const core=x=>norm(x).replace(/lmhub|hub|station|spx|lm/g,''),cs=norm(r.cur),sys=detect(r.cur),a=core(r.cur),b=core(r.stn),
+      inStn=(b.length>1&&a.includes(b))||cs.includes(norm(r.stn))||(sys&&cs===norm(sys));
     const m=manual[r.oid]||{},sysStatus=inStn?(sys||'LMHub_Received'):null;
     const eff=STATUSES.includes(m.actualStatus)?m.actualStatus:sysStatus;
     if(eff){s.arrived++;s.by[eff]=(s.by[eff]||0)+1;if(eff==='Delivered')s.delivered++}
     list.push({...r,station:s.name,sysStatus,eff});
   });
   list.sort((a,b)=>a.station.localeCompare(b.station)||String(a.oid).localeCompare(String(b.oid)));
-  return {st:Object.values(st).sort((a,b)=>a.name.localeCompare(b.name)),list,
-    info:`Preorders: ${pre.length} rows (${P.length} used) · Actual Orders: ${ord.length} rows (${O.length} used) · Stations: ${Object.keys(st).length}`};
+  return {st:Object.values(st).sort((a,b)=>a.name.localeCompare(b.name)),list,cc,
+    info:`Preorders: ${pre.length} rows (${P.length} used) · Actual Orders: ${ord.length} rows (${O.length} used) · Stations: ${Object.keys(st).length}${HDR.size?' · header blank, used column position: '+[...HDR].join(', '):''}`};
 }
 
 function parts(s){
@@ -173,6 +179,7 @@ function renderSummary(){
   $('stations').innerHTML=model.st.map(s=>{const x=parts(s);
     return `<div class="card st ${sel===s.name?'sel':''}" data-s="${esc(s.name)}"><div class="h"><h4>${esc(s.name)}</h4><span class="pc">${x.p.toFixed(1)}%</span></div>${x.tiles}${x.stack}${x.arr}${x.chips}</div>`}).join('');
   $('dbg').textContent=model.info;
+  $('cursBody').innerHTML=Object.entries(model.cc).sort((a,b)=>a[0].localeCompare(b[0])).map(([k,v])=>`<span class="chip" style="--c:#94a3b8">${esc(k)} <b>${v}</b></span>`).join('');
   const sig=model.st.map(s=>s.name).join('|');
   if(sig!==stSig){stSig=sig;const cur=$('fs').value;
     $('fs').innerHTML='<option value="">All stations (A–Z)</option>'+model.st.map(s=>`<option ${s.name===cur?'selected':''}>${esc(s.name)}</option>`).join('');
@@ -182,11 +189,11 @@ function renderSummary(){
 const busy=()=>pending.size>0||(document.activeElement&&document.activeElement.closest&&document.activeElement.closest('#rows'));
 function renderRows(){
   const q=norm($('q').value),fs=$('fs').value,fst=$('fst').value;
-  const L=model.list.filter(r=>(!fs||r.station===fs)&&(!fst||(fst==='_none'?!r.eff:r.eff===fst))&&(!q||norm(r.oid+r.cp+(manual[r.oid]?.rider||'')).includes(q)));
+  const L=model.list.filter(r=>(!fs||r.station===fs)&&(!fst||(fst==='_none'?!r.eff:r.eff===fst))&&(!q||norm(r.oid+r.cur+r.cp+(manual[r.oid]?.rider||'')).includes(q)));
   const V=L.slice(0,limit);
   const opt=(arr,v)=>arr.map(x=>`<option value="${x}" ${x===v?'selected':''}>${x||'—'}</option>`).join('');
   $('rows').innerHTML=V.map(r=>{const m=manual[r.oid]||{};
-    return `<tr data-id="${esc(r.oid)}"><td>${esc(r.oid)}</td><td>${esc(r.station)}</td><td>${esc(r.cp)}</td>
+    return `<tr data-id="${esc(r.oid)}"><td>${esc(r.oid)}</td><td>${esc(r.station)}</td><td>${esc(r.cur)}</td><td>${esc(r.cp)}</td>
     <td><span class="sp" ${r.sysStatus?`style="background:${COLOR[r.sysStatus]}22;color:${COLOR[r.sysStatus]}"`:''}>${esc(r.sysStatus||'Not in station')}</span></td>
     <td><select data-f="actualStatus">${opt(['',...AZ],m.actualStatus||'')}</select></td>
     <td><select data-f="hvi">${opt(['','Yes','No'],m.hvi||'')}</select></td>
@@ -214,7 +221,7 @@ async function pullState(){
 async function refresh(){
   try{
     $('err').textContent='';
-    const [p,o]=await Promise.all([loadSheet('Preorders',F.pHub),loadSheet('Actual Orders',F.oid)]);
+    const [p,o]=await Promise.all([loadSheet('Preorders',F.pHub,['soc','pSub','pHub','dist','town','cnt']),loadSheet('Actual Orders',F.oid,['oid','aSub','stn','cur','cp'])]);
     pre=p;ord=o;
     try{await pullState();setSync('Live ✓','ok')}catch(e){setSync('Sync offline','bad');$('err').textContent='Cloudflare sync unavailable: '+e.message}
     renderSummary();
