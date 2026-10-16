@@ -157,7 +157,7 @@ function compute(){
     if(!r.oid||!r.stn)return;
     const s=get(r.stn);s.orders++;const ck=r.cur||'(blank)';cc[ck]=(cc[ck]||0)+1;
     const core=x=>norm(x).replace(/lmhub|hub|station|spx|lm/g,''),cs=norm(r.cur),sys=detect(r.cur),a=core(r.cur),b=core(r.stn),
-      inStn=(b.length>1&&a.includes(b))||cs.includes(norm(r.stn))||(sys&&cs===norm(sys));
+      inStn=(b.length>1&&a.includes(b))||cs.includes(norm(r.stn))||(sys&&cs===norm(sys))||cs==='lm'||cs==='end';   // Current Station "LM" or "End" = already inside the station hub
     const m=manual[r.oid]||{},sysStatus=inStn?(sys||'LMHub_Received'):null;
     const eff=STATUSES.includes(m.actualStatus)?m.actualStatus:sysStatus;
     if(eff){s.arrived++;s.by[eff]=(s.by[eff]||0)+1;if(eff==='Delivered')s.delivered++}
@@ -202,7 +202,7 @@ function renderRows(){
   const opt=(arr,v)=>arr.map(x=>`<option value="${x}" ${x===v?'selected':''}>${x||'—'}</option>`).join('');
   $('rows').innerHTML=V.map(r=>{const m=manual[r.oid]||{};
     return `<tr data-id="${esc(r.oid)}"><td data-label="Order ID">${esc(r.oid)}</td><td data-label="Station">${esc(r.station)}</td><td data-label="Current Station">${esc(r.cur)}</td><td data-label="Buyer CP#">${esc(r.cp)}</td>
-    <td data-label="System status"><span class="sp" ${r.sysStatus?`style="background:${COLOR[r.sysStatus]}22;color:${COLOR[r.sysStatus]}"`:''}>${esc(r.sysStatus||'Not in station')}</span></td>
+    <td data-label="System status">${r.sysStatus?`<span class="sp" style="background:${COLOR[r.sysStatus]}22;color:${COLOR[r.sysStatus]}">${esc(r.station)}</span>`:`<span class="sp">Not in station</span>`}</td>
     <td data-label="Actual Status"><select data-f="actualStatus">${opt(['',...AZ],m.actualStatus||'')}</select></td>
     <td data-label="HVI OpEx Inbound"><select data-f="hvi">${opt(['','Yes','No'],m.hvi||'')}</select></td>
     <td data-label="Rider Assigned"><input type="text" data-f="rider" value="${esc(m.rider||'')}"></td>
